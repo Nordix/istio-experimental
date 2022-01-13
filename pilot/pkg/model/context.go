@@ -523,10 +523,6 @@ type NodeMetadata struct {
 	// IstioVersion specifies the Istio version associated with the proxy
 	IstioVersion string `json:"ISTIO_VERSION,omitempty"`
 
-	// IstioRevision specifies the Istio revision associated with the proxy.
-	// Mostly used when istiod requests the upstream.
-	IstioRevision string `json:"ISTIO_REVISION,omitempty"`
-
 	// Labels specifies the set of workload instance (ex: k8s pod) labels associated with this node.
 	Labels map[string]string `json:"LABELS,omitempty"`
 
@@ -624,6 +620,9 @@ type NodeMetadata struct {
 
 	// Envoy prometheus port redirecting to admin port prometheus endpoint.
 	EnvoyPrometheusPort int `json:"ENVOY_PROMETHEUS_PORT,omitempty"`
+
+	// ExitOnZeroActiveConnections terminates Envoy if there are no active connections if set.
+	ExitOnZeroActiveConnections StringBool `json:"EXIT_ON_ZERO_ACTIVE_CONNECTIONS,omitempty"`
 
 	// Contains a copy of the raw metadata. This is needed to lookup arbitrary values.
 	// If a value is known ahead of time it should be added to the struct rather than reading from here,

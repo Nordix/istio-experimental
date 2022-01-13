@@ -184,12 +184,14 @@ func (d *DeploymentController) configureIstioGateway(log *istiolog.Scope, gw gat
 	}
 	log.Info("reconciling")
 
-	if err := d.ApplyTemplate("service.yaml", serviceInput{gw, extractServicePorts(gw)}); err != nil {
+	svc := serviceInput{Gateway: &gw, Ports: extractServicePorts(gw)}
+	if err := d.ApplyTemplate("service.yaml", svc); err != nil {
 		return fmt.Errorf("update service: %v", err)
 	}
 	log.Info("service updated")
 
-	if err := d.ApplyTemplate("deployment.yaml", gw); err != nil {
+	dep := deploymentInput{Gateway: &gw, KubeVersion122: kube.IsAtLeastVersion(d.client, 22)}
+	if err := d.ApplyTemplate("deployment.yaml", dep); err != nil {
 		return fmt.Errorf("update deployment: %v", err)
 	}
 	log.Info("deployment updated")
@@ -220,7 +222,7 @@ func (d *DeploymentController) configureIstioGateway(log *istiolog.Scope, gw gat
 }
 
 // ApplyTemplate renders a template with the given input and (server-side) applies the results to the cluster.
-func (d *DeploymentController) ApplyTemplate(template string, input interface{}, subresources ...string) error {
+func (d *DeploymentController) ApplyTemplate(template string, input metav1.Object, subresources ...string) error {
 	var buf bytes.Buffer
 	if err := d.templates.ExecuteTemplate(&buf, template, input); err != nil {
 		return err
@@ -241,7 +243,7 @@ func (d *DeploymentController) ApplyTemplate(template string, input interface{},
 	}
 
 	log.Debugf("applying %v", string(j))
-	return d.patcher(gvr, us.GetName(), us.GetNamespace(), j, subresources...)
+	return d.patcher(gvr, us.GetName(), input.GetNamespace(), j, subresources...)
 }
 
 // ApplyObject renders an object with the given input and (server-side) applies the results to the cluster.
@@ -275,8 +277,13 @@ func mergeMaps(maps ...map[string]string) map[string]string {
 }
 
 type serviceInput struct {
-	gateway.Gateway
+	*gateway.Gateway
 	Ports []corev1.ServicePort
+}
+
+type deploymentInput struct {
+	*gateway.Gateway
+	KubeVersion122 bool
 }
 
 func extractServicePorts(gw gateway.Gateway) []corev1.ServicePort {
@@ -291,7 +298,11 @@ func extractServicePorts(gw gateway.Gateway) []corev1.ServicePort {
 			continue
 		}
 		portNums[int32(l.Port)] = struct{}{}
-		name := fmt.Sprintf("%s-%d", strings.ToLower(string(l.Protocol)), i)
+		name := string(l.Name)
+		if name == "" {
+			// Should not happen since name is required, but in case an invalid resource gets in...
+			name = fmt.Sprintf("%s-%d", strings.ToLower(string(l.Protocol)), i)
+		}
 		svcPorts = append(svcPorts, corev1.ServicePort{
 			Name: name,
 			Port: int32(l.Port),

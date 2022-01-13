@@ -250,12 +250,8 @@ func (c *testContext) SkipDumping() {
 	c.scope.skipDumping()
 }
 
-func (c *testContext) ConfigKube(clusters ...cluster.Cluster) resource.ConfigManager {
+func (c *testContext) Config(clusters ...cluster.Cluster) resource.ConfigManager {
 	return newConfigManager(c, clusters)
-}
-
-func (c *testContext) ConfigIstio() resource.ConfigManager {
-	return newConfigManager(c, c.Clusters().Configs())
 }
 
 func (c *testContext) CreateTmpDirectoryOrFail(prefix string) string {

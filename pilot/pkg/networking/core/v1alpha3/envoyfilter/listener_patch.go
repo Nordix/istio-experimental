@@ -73,8 +73,9 @@ func patchListeners(
 	if !skipAdds {
 		for _, lp := range efw.Patches[networking.EnvoyFilter_LISTENER] {
 			if lp.Operation == networking.EnvoyFilter_Patch_ADD {
-				// If listener ADD patch does not specify a patch context, only add for sidecar outbound.
-				if lp.Match.Context == networking.EnvoyFilter_ANY && patchContext != networking.EnvoyFilter_SIDECAR_OUTBOUND {
+				// If listener ADD patch does not specify a patch context, only add for sidecar outbound and gateway.
+				if lp.Match.Context == networking.EnvoyFilter_ANY && patchContext != networking.EnvoyFilter_SIDECAR_OUTBOUND &&
+					patchContext != networking.EnvoyFilter_GATEWAY {
 					continue
 				}
 				if !commonConditionMatch(patchContext, lp) {
@@ -618,6 +619,13 @@ func filterChainMatch(listener *xdslistener.Listener, fc *xdslistener.FilterChai
 		return true
 	}
 
+	isVirtual := listener.Name == model.VirtualInboundListenerName || listener.Name == model.VirtualOutboundListenerName
+	// We only do this for virtual listeners, which will move the listener port into a FCM. For non-virtual listeners,
+	// we will handle this in the proper listener match.
+	if isVirtual && lMatch.GetPortNumber() > 0 && fc.GetFilterChainMatch().GetDestinationPort().GetValue() != lMatch.GetPortNumber() {
+		return false
+	}
+
 	match := lMatch.FilterChain
 	if match == nil {
 		return true
@@ -657,13 +665,6 @@ func filterChainMatch(listener *xdslistener.Listener, fc *xdslistener.FilterChai
 			return false
 		}
 	}
-	isVirtual := listener.Name == model.VirtualInboundListenerName || listener.Name == model.VirtualOutboundListenerName
-	// We only do this for virtual listeners, which will move the listener port into a FCM. For non-virtual listeners,
-	// we will handle this in the proper listener match.
-	if isVirtual && lMatch.GetPortNumber() > 0 && fc.GetFilterChainMatch().GetDestinationPort().GetValue() != lMatch.GetPortNumber() {
-		return false
-	}
-
 	return true
 }
 

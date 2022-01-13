@@ -64,11 +64,11 @@ func TestStrictMTLS(t *testing.T) {
 		Features("security.peer.ecc-signature-algorithm").
 		Run(func(t framework.TestContext) {
 			peerTemplate := tmpl.EvaluateOrFail(t, PeerAuthenticationConfig, map[string]string{"AppNamespace": apps.Namespace.Name()})
-			t.ConfigIstio().ApplyYAMLOrFail(t, apps.Namespace.Name(), peerTemplate)
+			t.Config().ApplyYAMLOrFail(t, apps.Namespace.Name(), peerTemplate)
 			util.WaitForConfig(t, apps.Namespace, peerTemplate)
 
 			drTemplate := tmpl.EvaluateOrFail(t, DestinationRuleConfigIstioMutual, map[string]string{"AppNamespace": apps.Namespace.Name()})
-			t.ConfigIstio().ApplyYAMLOrFail(t, apps.Namespace.Name(), drTemplate)
+			t.Config().ApplyYAMLOrFail(t, apps.Namespace.Name(), drTemplate)
 			util.WaitForConfig(t, apps.Namespace, drTemplate)
 
 			response := apps.Client.CallOrFail(t, echo.CallOptions{

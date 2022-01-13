@@ -29,6 +29,7 @@ import (
 	envoy_admin_v3 "github.com/envoyproxy/go-control-plane/envoy/admin/v3"
 	"golang.org/x/sync/errgroup"
 	kubeCore "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	kubeMeta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 	"sigs.k8s.io/yaml"
@@ -135,6 +136,7 @@ func TestServiceExportedInOneCluster(t *testing.T) {
 	framework.NewTest(t).
 		Features("traffic.mcs.servicediscovery").
 		Run(func(t framework.TestContext) {
+			t.Skip("https://github.com/istio/istio/issues/34051")
 			// Get all the clusters where service B resides.
 			bClusters := echos.Match(echo.Service(serviceB)).Clusters()
 
@@ -180,11 +182,11 @@ func installMCSCRDs(t resource.Context) error {
 			return err
 		}
 		if t.Settings().NoCleanup {
-			if err := t.ConfigKube().ApplyYAMLNoCleanup("", string(crd)); err != nil {
+			if err := t.Config().ApplyYAMLNoCleanup("", string(crd)); err != nil {
 				return err
 			}
 		} else {
-			if err := t.ConfigKube().ApplyYAML("", string(crd)); err != nil {
+			if err := t.Config().ApplyYAML("", string(crd)); err != nil {
 				return err
 			}
 		}
@@ -288,10 +290,10 @@ func checkClustersReached(t framework.TestContext, ht hostType, src, dest echo.I
 	_, err := src.CallWithRetry(echo.CallOptions{
 		Address:   address,
 		Target:    dest,
-		Count:     50,
+		Count:     20,
 		PortName:  "http",
 		Validator: echo.And(echo.ExpectOK(), echo.ExpectReachedClusters(clusters)),
-	}, retryTimeout)
+	}, retry.Delay(time.Millisecond*500), retryTimeout)
 	if err != nil {
 		t.Fatalf("failed calling host %s: %v\nCluster Details:\n%s", address, err,
 			getClusterDetailsYAML(t, address, src, dest))
@@ -418,7 +420,7 @@ func createAndCleanupServiceExport(t framework.TestContext, service string, clus
 
 				err := c.MCSApis().MulticlusterV1alpha1().ServiceExports(testNS).Delete(context.TODO(),
 					serviceExport.Name, kubeMeta.DeleteOptions{})
-				if err != nil {
+				if err != nil && !kerrors.IsAlreadyExists(err) {
 					scopes.Framework.Warnf("failed deleting ServiceExport %s/%s in cluster %s: %v",
 						testNS, serviceB, c.Name(), err)
 					return
@@ -455,7 +457,7 @@ func genClusterSetIPService(c cluster.Cluster) (*kubeCore.Service, error) {
 		},
 	}
 
-	if _, err := c.CoreV1().Services(testNS).Create(context.TODO(), dummySvc, kubeMeta.CreateOptions{}); err != nil {
+	if _, err := c.CoreV1().Services(testNS).Create(context.TODO(), dummySvc, kubeMeta.CreateOptions{}); err != nil && !kerrors.IsAlreadyExists(err) {
 		return nil, err
 	}
 
@@ -507,5 +509,8 @@ func createServiceImport(c cluster.Cluster, vip string) error {
 			Ports: ports,
 		},
 	}, kubeMeta.CreateOptions{})
-	return err
+	if err != nil && !kerrors.IsAlreadyExists(err) {
+		return err
+	}
+	return nil
 }

@@ -42,11 +42,11 @@ import (
 	extensions "istio.io/api/extensions/v1alpha1"
 	meshconfig "istio.io/api/mesh/v1alpha1"
 	networking "istio.io/api/networking/v1alpha3"
-	networkingv1beta1 "istio.io/api/networking/v1beta1"
 	security_beta "istio.io/api/security/v1beta1"
 	telemetry "istio.io/api/telemetry/v1alpha1"
 	type_beta "istio.io/api/type/v1beta1"
 	"istio.io/istio/pilot/pkg/features"
+	"istio.io/istio/pilot/pkg/util/constant"
 	"istio.io/istio/pilot/pkg/util/sets"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/constants"
@@ -1528,7 +1528,7 @@ func ValidateMeshConfig(mesh *meshconfig.MeshConfig) (errs error) {
 
 	if mesh.DefaultConfig == nil {
 		errs = multierror.Append(errs, errors.New("missing default config"))
-	} else if err := ValidateMeshConfigProxyConfig(mesh.DefaultConfig); err != nil {
+	} else if err := ValidateProxyConfig(mesh.DefaultConfig); err != nil {
 		errs = multierror.Append(errs, err)
 	}
 
@@ -1574,8 +1574,8 @@ func validateServiceSettings(config *meshconfig.MeshConfig) (errs error) {
 	return
 }
 
-// ValidateMeshConfigProxyConfig checks that the mesh config is well-formed
-func ValidateMeshConfigProxyConfig(config *meshconfig.ProxyConfig) (errs error) {
+// ValidateProxyConfig checks that the mesh config is well-formed
+func ValidateProxyConfig(config *meshconfig.ProxyConfig) (errs error) {
 	if config.ConfigPath == "" {
 		errs = multierror.Append(errs, errors.New("config path must be set"))
 	}
@@ -1960,6 +1960,7 @@ var ValidateVirtualService = registerValidateFunc("ValidateVirtualService",
 		}
 
 		appliesToMesh := false
+		appliesToGateway := false
 		if len(virtualService.Gateways) == 0 {
 			appliesToMesh = true
 		} else {
@@ -1967,6 +1968,25 @@ var ValidateVirtualService = registerValidateFunc("ValidateVirtualService",
 			for _, gatewayName := range virtualService.Gateways {
 				if gatewayName == constants.IstioMeshGateway {
 					appliesToMesh = true
+				} else {
+					appliesToGateway = true
+				}
+			}
+		}
+
+		if !appliesToGateway {
+			validateJWTClaimRoute := func(headers map[string]*networking.StringMatch) {
+				for key := range headers {
+					if strings.HasPrefix(key, constant.HeaderJWTClaim) {
+						msg := fmt.Sprintf("JWT claim based routing (key: %s) is only supported for gateway, found no gateways: %v", key, virtualService.Gateways)
+						errs = appendValidation(errs, errors.New(msg))
+					}
+				}
+			}
+			for _, http := range virtualService.GetHttp() {
+				for _, m := range http.GetMatch() {
+					validateJWTClaimRoute(m.GetHeaders())
+					validateJWTClaimRoute(m.GetWithoutHeaders())
 				}
 			}
 		}
@@ -3348,36 +3368,12 @@ func (aae *AnalysisAwareError) Error() string {
 	return aae.Msg
 }
 
-// ValidateProxyConfig validates a ProxyConfig CR (as opposed to the MeshConfig field).
-var ValidateProxyConfig = registerValidateFunc("ValidateProxyConfig",
-	func(cfg config.Config) (Warning, error) {
-		spec, ok := cfg.Spec.(*networkingv1beta1.ProxyConfig)
-		if !ok {
-			return nil, fmt.Errorf("cannot cast to proxyconfig")
-		}
-
-		errs := Validation{}
-
-		errs = appendValidation(errs,
-			validateWorkloadSelector(spec.Selector),
-			validateConcurrency(spec.Concurrency.GetValue()),
-		)
-		return errs.Unwrap()
-	})
-
-func validateConcurrency(concurrency int32) (v Validation) {
-	if concurrency < 0 {
-		v = appendErrorf(v, "concurrency must be greater than or equal to 0")
-	}
-	return
-}
-
 // ValidateTelemetry validates a Telemetry.
 var ValidateTelemetry = registerValidateFunc("ValidateTelemetry",
 	func(cfg config.Config) (Warning, error) {
 		spec, ok := cfg.Spec.(*telemetry.Telemetry)
 		if !ok {
-			return nil, fmt.Errorf("cannot cast to telemetry")
+			return nil, fmt.Errorf("cannot cast to service entry")
 		}
 
 		errs := Validation{}

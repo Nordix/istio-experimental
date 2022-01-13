@@ -58,8 +58,6 @@ type ConfigInput struct {
 	ConfigName string
 	// Number of services to make
 	Services int
-	// Number of instances to make
-	Instances int
 	// Type of proxy to generate configs for
 	ProxyType model.NodeType
 }
@@ -113,12 +111,6 @@ var testCases = []ConfigInput{
 		Services:  100,
 		ProxyType: model.Router,
 	},
-	{
-		Name:      "serviceentry-workloadentry",
-		Services:  100,
-		Instances: 1000,
-		ProxyType: model.SidecarProxy,
-	},
 }
 
 var sidecarTestCases = func() (res []ConfigInput) {
@@ -152,8 +144,6 @@ func BenchmarkInitPushContext(b *testing.B) {
 			s, proxy := setupTest(b, tt)
 			b.ResetTimer()
 			for n := 0; n < b.N; n++ {
-				s.Env().PushContext.InitDone.Store(false)
-				s.ServiceEntryRegistry.SetRefreshIndexes()
 				initPushContext(s.Env(), proxy)
 			}
 		})
@@ -364,7 +354,7 @@ func setupTest(t testing.TB, config ConfigInput) (*FakeDiscoveryServer, *model.P
 				"istio.io/benchmark": "true",
 			},
 			ClusterID:    "Kubernetes",
-			IstioVersion: "1.13.0",
+			IstioVersion: "1.12.0",
 		},
 		ConfigNamespace:  "default",
 		VerifiedIdentity: &spiffe.Identity{Namespace: "default"},

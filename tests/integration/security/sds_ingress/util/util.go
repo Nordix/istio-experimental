@@ -477,9 +477,9 @@ func SetupConfig(ctx framework.TestContext, ns namespace.Instance, config ...Tes
 	for _, c := range config {
 		apply = append(apply, runTemplate(ctx, vsTemplate, c), runTemplate(ctx, gwTemplate, c))
 	}
-	ctx.ConfigIstio().ApplyYAMLOrFail(ctx, ns.Name(), apply...)
+	ctx.Config().ApplyYAMLOrFail(ctx, ns.Name(), apply...)
 	return func() {
-		ctx.ConfigIstio().DeleteYAMLOrFail(ctx, ns.Name(), apply...)
+		ctx.Config().DeleteYAMLOrFail(ctx, ns.Name(), apply...)
 	}
 }
 

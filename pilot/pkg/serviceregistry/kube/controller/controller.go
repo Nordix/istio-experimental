@@ -287,7 +287,7 @@ type Controller struct {
 }
 
 // NewController creates a new Kubernetes controller
-// Created by bootstrap and multicluster (see secretcontroller).
+// Created by bootstrap and multicluster (see multicluster.Controller).
 func NewController(kubeClient kubelib.Client, options Options) *Controller {
 	c := &Controller{
 		opts:                        options,
@@ -656,7 +656,8 @@ func (c *Controller) onNodeEvent(obj interface{}, event model.Event) error {
 	// update all related services
 	if updatedNeeded && c.updateServiceNodePortAddresses() {
 		c.opts.XDSUpdater.ConfigUpdate(&model.PushRequest{
-			Full: true,
+			Full:   true,
+			Reason: []model.TriggerReason{model.ServiceUpdate},
 		})
 	}
 	return nil
@@ -825,6 +826,7 @@ func (c *Controller) syncEndpoints() error {
 
 // Run all controllers until a signal is received
 func (c *Controller) Run(stop <-chan struct{}) {
+	st := time.Now()
 	if c.opts.NetworksWatcher != nil {
 		c.opts.NetworksWatcher.AddNetworksHandler(c.reloadNetworkLookup)
 		c.reloadMeshNetworks()
@@ -838,6 +840,7 @@ func (c *Controller) Run(stop <-chan struct{}) {
 		log.Errorf("one or more errors force-syncing resources: %v", err)
 	}
 	c.initialSync.Store(true)
+	log.Infof("kube controller for %s synced after %v", c.opts.ClusterID, time.Since(st))
 	// after the in-order sync we can start processing the queue
 	c.queue.Run(stop)
 	log.Infof("Controller terminated")
